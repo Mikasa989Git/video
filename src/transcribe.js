@@ -41,7 +41,11 @@ function transcribe(audioPath, outJsonPath) {
     });
   } catch (err) {
     const stderr = (err.stderr || '').toString();
-    throw new Error(`ffmpeg whisper transcription failed: ${stderr.slice(-2000) || err.message}`);
+    // err.signal (e.g. SIGKILL from an out-of-memory kill) is the single most useful
+    // diagnostic when ffmpeg's own stderr just stops mid-output with no stated reason —
+    // previously this was silently dropped whenever any stderr existed, even partial.
+    const status = err.signal ? `killed by signal ${err.signal}` : `exit code ${err.status}`;
+    throw new Error(`ffmpeg whisper transcription failed (${status}): ${stderr.slice(-2000) || err.message}`);
   }
   return loadTranscript(outJsonPath);
 }
