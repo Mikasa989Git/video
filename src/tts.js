@@ -1,18 +1,19 @@
-// Script -> voiceover.mp3 via OpenAI's TTS API (tts-1). Uses the same OpenAI key already
-// required for image generation — no separate account/quota to run out of, and ~6.7x
-// cheaper than the ElevenLabs model this replaced ($0.015 vs $0.10 per 1,000 characters).
+// Script -> voiceover.mp3 via ElevenLabs' text-to-speech API.
 //
-// tts-1 caps input at 4096 characters per request, so this chunks at sentence boundaries
-// (never splitting a sentence across two calls) and concatenates the resulting audio with
-// ffmpeg (stream copy, no re-encode — no quality loss, no seam risk).
+// ElevenLabs accepts long inputs per request, but this still chunks at sentence
+// boundaries (never splitting a sentence across two calls) and concatenates the
+// resulting audio with ffmpeg (stream copy, no re-encode — no quality loss, no seam
+// risk) — the same approach as every other multi-chunk TTS call in this pipeline, so
+// a client-side edit that changes chunk boundaries can't produce audible glitches.
 
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { requireEnv, ffmpegPath, ensureDir } = require('./util');
 
-const MAX_CHARS_PER_CHUNK = 3800; // conservative vs tts-1's hard 4096-char limit
-const DEFAULT_VOICE = process.env.OPENAI_TTS_VOICE || 'onyx';
+const MAX_CHARS_PER_CHUNK = 4500;
+const DEFAULT_VOICE = process.env.ELEVENLABS_VOICE_ID;
+const MODEL_ID = process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2';
 
 function chunkScript(scriptText, maxChars) {
   const sentences = scriptText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -32,36 +33,38 @@ function chunkScript(scriptText, maxChars) {
 }
 
 async function ttsChunk(text, voice, apiKey) {
-  const res = await fetch('https://api.openai.com/v1/audio/speech', {
+  if (!voice) throw new Error('No ElevenLabs voice selected — set ELEVENLABS_VOICE_ID or pick a voice in config/voices.json');
+  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      'xi-api-key': apiKey,
       'Content-Type': 'application/json',
+      Accept: 'audio/mpeg',
     },
     body: JSON.stringify({
-      model: 'tts-1',
-      input: text,
-      voice,
-      response_format: 'mp3',
+      text,
+      model_id: MODEL_ID,
     }),
   });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
-    try { const j = await res.json(); msg = j.error?.message || msg; } catch {}
+    try { const j = await res.json(); msg = j.detail?.message || JSON.stringify(j.detail) || msg; } catch {}
     throw new Error(msg);
   }
   return Buffer.from(await res.arrayBuffer());
 }
 
-// OpenAI tts-1: $15 per 1,000,000 characters = $0.000015/char, flat, pay-as-you-go.
-const USD_PER_CHAR = 0.000015;
+// ElevenLabs bills in "credits" whose $/credit varies by subscription plan, not a
+// flat public rate like OpenAI's — this is a rough estimate for the running cost
+// tracker only (based on this project's own prior measurement), not a real charge.
+const USD_PER_CHAR = 0.0001;
 
 async function generateVoiceover(scriptText, outPath, { costLedger, voiceId } = {}) {
   if (fs.existsSync(outPath)) {
     console.log(`  [tts] using cached ${path.basename(outPath)}`);
     return outPath;
   }
-  const apiKey = requireEnv('OPENAI_API_KEY');
+  const apiKey = requireEnv('ELEVENLABS_API_KEY');
   const voice = voiceId || DEFAULT_VOICE;
 
   const chunks = chunkScript(scriptText, MAX_CHARS_PER_CHUNK);
@@ -91,7 +94,7 @@ async function generateVoiceover(scriptText, outPath, { costLedger, voiceId } = 
     execFileSync(ffmpegPath(), ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', outPath]);
   }
 
-  if (costLedger) costLedger.add('tts', totalChars * USD_PER_CHAR, `${totalChars} chars, ${chunks.length} chunk(s), voice=${voice}`);
+  if (costLedger) costLedger.add('tts', totalChars * USD_PER_CHAR, `${totalChars} chars, ${chunks.length} chunk(s), voice=${voice} (estimate — actual cost depends on your ElevenLabs plan)`);
   return outPath;
 }
 
@@ -102,7 +105,7 @@ const SAMPLE_TEXT = "Hi there — this is what I sound like. I'll be narrating y
 // the sample text never changes, so there's nothing to regenerate after the first time.
 async function ensureVoiceSample(voiceId, samplePath, costLedger) {
   if (fs.existsSync(samplePath)) return samplePath;
-  const apiKey = requireEnv('OPENAI_API_KEY');
+  const apiKey = requireEnv('ELEVENLABS_API_KEY');
   const audio = await ttsChunk(SAMPLE_TEXT, voiceId, apiKey);
   ensureDir(path.dirname(samplePath));
   fs.writeFileSync(samplePath, audio);

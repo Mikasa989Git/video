@@ -1,10 +1,11 @@
 {
-  "_readme": "Voice list shown in the web UI's voice picker. voiceId must be one of OpenAI's tts-1 voices: alloy, ash, coral, echo, fable, nova, onyx, sage, shimmer. Preview them at platform.openai.com/docs/guides/text-to-speech. To add/remove options, just edit this array — no code changes needed. If a client picks none, the pipeline falls back to OPENAI_TTS_VOICE (or 'onyx') from .env.local.",
+  "_readme": "Voice list shown in the web UI's voice picker. voiceId must be a real ElevenLabs voice ID from your account (Voices tab, or the Voice Library). Labels below are placeholders since they weren't looked up by name — rename them to whatever's actually useful to you, no code changes needed. If a client picks none, the pipeline falls back to ELEVENLABS_VOICE_ID from .env.local.",
   "voices": [
-    { "label": "Male — Onyx (bold)", "voiceId": "onyx", "gender": "male" },
-    { "label": "Male — Echo (deep)", "voiceId": "echo", "gender": "male" },
-    { "label": "Female — Nova (bright)", "voiceId": "nova", "gender": "female" },
-    { "label": "Female — Shimmer (soft)", "voiceId": "shimmer", "gender": "female" },
-    { "label": "Neutral — Alloy", "voiceId": "alloy", "gender": "neutral" }
+    { "label": "Voice 1", "voiceId": "UgBBYS2sOqTuMpoF3BR0" },
+    { "label": "Voice 2", "voiceId": "tnSpp4vdxKPjI9w0GnoV" },
+    { "label": "Voice 3", "voiceId": "2mltbVQP21Fq8XgIfRQJ" },
+    { "label": "Voice 4", "voiceId": "X2j354mOfDROQk9ghjz4" },
+    { "label": "Voice 5", "voiceId": "vfrRpgHdObBxIdNrHpHf" },
+    { "label": "Voice 6", "voiceId": "FGY2WhTYpPnrIDTdsKH5" }
   ]
 }

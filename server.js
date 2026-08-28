@@ -161,7 +161,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname.startsWith('/api/voice-sample/')) {
       const voiceId = url.pathname.slice('/api/voice-sample/'.length);
-      if (!/^[a-z]+$/i.test(voiceId)) return sendJson(res, 400, { error: 'invalid voice id' });
+      if (!/^[a-z0-9]+$/i.test(voiceId)) return sendJson(res, 400, { error: 'invalid voice id' });
       const samplePath = path.join(ROOT, 'config', 'voice-samples', `${voiceId}.mp3`);
       await ensureVoiceSample(voiceId, samplePath); // cached after the first request per voice
       const content = fs.readFileSync(samplePath);
