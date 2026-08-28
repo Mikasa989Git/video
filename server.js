@@ -53,9 +53,14 @@ function serveStatic(req, res, urlPath) {
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', chunk => { data += chunk; });
-    req.on('end', () => resolve(data));
+    // Accumulate raw bytes and decode ONCE at the end — `data += chunk` looks harmless but
+    // implicitly stringifies each Buffer chunk independently, and if a multi-byte UTF-8
+    // character (e.g. Hebrew, or any non-ASCII input) happens to split across a network
+    // chunk boundary, each half gets decoded separately and corrupted. Caught in
+    // production: a topic containing non-English text arrived at Claude as garbled mojibake.
+    const chunks = [];
+    req.on('data', chunk => { chunks.push(chunk); });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
 }
