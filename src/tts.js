@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { requireEnv, ffmpegPath, ensureDir } = require('./util');
 
@@ -68,6 +69,9 @@ async function generateVoiceover(scriptText, outPath, { costLedger, voiceId } = 
   const voice = voiceId || DEFAULT_VOICE;
 
   const chunks = chunkScript(scriptText, MAX_CHARS_PER_CHUNK);
+  if (chunks.length === 0) {
+    throw new Error(`generateVoiceover got no text to synthesize (script was empty or whitespace-only after sanitizing) — outPath: ${outPath}`);
+  }
   console.log(`  [tts] generating voiceover (voice: ${voice}) in ${chunks.length} chunk(s)...`);
 
   const tmpDir = path.join(path.dirname(outPath), '.tts_chunks');
@@ -75,7 +79,13 @@ async function generateVoiceover(scriptText, outPath, { costLedger, voiceId } = 
   const chunkPaths = [];
   let totalChars = 0;
   for (let i = 0; i < chunks.length; i++) {
-    const chunkPath = path.join(tmpDir, `chunk_${String(i).padStart(3, '0')}.mp3`);
+    // Keyed by a content hash, not just index — this directory is shared across every
+    // synthesis attempt for a job (e.g. lengthfit.js tries several candidate scripts in a
+    // row against the same tmpDir), so an index-only name would let attempt 2 silently
+    // reuse attempt 1's audio at the same position if the text there actually differs.
+    // Real bug this fixed: exactly that staleness, caught from a live production failure.
+    const hash = crypto.createHash('sha1').update(chunks[i]).digest('hex').slice(0, 10);
+    const chunkPath = path.join(tmpDir, `chunk_${String(i).padStart(3, '0')}_${hash}.mp3`);
     if (!fs.existsSync(chunkPath)) {
       console.log(`    chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
       const audio = await ttsChunk(chunks[i], voice, apiKey);
@@ -88,6 +98,12 @@ async function generateVoiceover(scriptText, outPath, { costLedger, voiceId } = 
   if (chunkPaths.length === 1) {
     fs.copyFileSync(chunkPaths[0], outPath);
   } else {
+    // Fail loudly and specifically here rather than handing ffmpeg a list it can't read —
+    // "Invalid data found when processing input" from ffmpeg gives no hint which chunk (or
+    // that it's a chunk problem at all) actually caused it.
+    const missing = chunkPaths.filter(p => !fs.existsSync(p) || fs.statSync(p).size === 0);
+    if (missing.length) throw new Error(`voiceover chunk file(s) missing or empty before concat: ${missing.join(', ')}`);
+
     const listPath = path.join(tmpDir, 'concat_list.txt');
     const listText = chunkPaths.map(p => `file '${p.replace(/\\/g, '/')}'`).join('\n');
     fs.writeFileSync(listPath, listText, 'utf8');
