@@ -45,7 +45,7 @@ RUN mkdir -p /opt/whisper/lib/pkgconfig && \
 # ---- Stage 2: ffmpeg, built from source with --enable-whisper ----
 FROM debian:bookworm-slim AS ffmpeg
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git build-essential pkg-config yasm nasm libx264-dev ca-certificates \
+    git build-essential pkg-config yasm nasm libx264-dev zlib1g-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=whisper /opt/whisper /opt/whisper
 ENV PKG_CONFIG_PATH=/opt/whisper/lib/pkgconfig
@@ -55,11 +55,19 @@ ENV PKG_CONFIG_PATH=/opt/whisper/lib/pkgconfig
 ENV LD_LIBRARY_PATH=/opt/whisper/lib
 WORKDIR /src
 RUN git clone --depth 1 https://git.ffmpeg.org/ffmpeg.git .
+# --enable-zlib is load-bearing: this app's assemble step feeds ffmpeg PNG scene images
+# (src/assemble.js), and ffmpeg's PNG codec (both decode and encode) depends on zlib for
+# DEFLATE decompression. Without zlib-dev present, configure silently drops PNG support
+# instead of failing the build — caught in production as "no decoder found for: png" at
+# the assemble stage, with a build that otherwise looked completely successful.
+# --enable-zlib makes that dependency required, so a missing zlib fails the build loudly
+# here instead of failing silently at video-assembly time.
 RUN ./configure \
       --prefix=/opt/ffmpeg \
       --enable-gpl \
       --enable-libx264 \
       --enable-whisper \
+      --enable-zlib \
     && make -j"$(nproc)" && make install
 
 # ---- Stage 3: runtime ----
