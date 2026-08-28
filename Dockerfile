@@ -23,7 +23,14 @@ RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git .
 # whisper.cpp's CMake build produces shared libs (libwhisper.so, libggml*.so) by
 # default — going with that rather than fighting it into a static build, since
 # forcing BUILD_SHARED_LIBS=OFF here turned out to just relocate the same problem.
-RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)"
+# GGML_NATIVE=OFF is load-bearing for a Docker image that runs somewhere other than
+# where it was built: ggml's default CMake config auto-detects the BUILD machine's CPU
+# and compiles with -march=native, baking in whatever instruction set (AVX2, AVX-512,
+# etc.) happens to be available there. If Render's actual runtime host has a different/
+# older CPU, executing one of those instructions crashes instantly with SIGILL (caught in
+# production — ffmpeg's whisper filter died with exactly that signal). Building for a
+# portable baseline instead trades a little inference speed for actually running at all.
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF && cmake --build build -j"$(nproc)"
 RUN mkdir -p /opt/whisper/lib /opt/whisper/include \
     && find build -name '*.so*' -exec cp -P {} /opt/whisper/lib/ \; \
     && cp include/whisper.h /opt/whisper/include/ \
