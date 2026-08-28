@@ -1,0 +1,18 @@
+{
+  "name": "corporate-explainer",
+  "description": "Semi-realistic illustrated corporate/documentary explainer style, based on the channel's reference videos. The only house style.",
+  "styleLine": "Semi-realistic digital illustration in a modern corporate/documentary explainer style, soft cel-shaded rendering with subtle gradients and gentle shadows giving real depth (never flat or minimal), clean confident linework, natural human proportions (not cartoon-stylized), detailed environments and architecture including cutaway cross-section diagrams when useful, muted realistic color palette (soft sky blues, warm cream and tan tones, olive green for money, warm neutrals, orange-red for warning/alert accents), grounded professional mood, 16:9 aspect ratio.",
+  "narrator": {
+    "enabled": true,
+    "description": "a friendly adult male narrator with short neat dark brown hair, clean-shaven, warm light-tan skin tone, wearing a solid navy blue polo shirt and dark pants, natural realistic body proportions, calm approachable expression",
+    "referencePoseLine": "full-body reference sheet, standing naturally, arms relaxed at sides, three-quarter or front-facing neutral pose, plain soft cream background, no text"
+  },
+  "noTextSuffix": "Render ONLY the text explicitly described above (if any), kept short and legible; do not add any other words, captions, titles, or labels beyond what is explicitly described.",
+  "referenceNote": "This is the SAME recurring character as every other scene in this video. Match the attached reference image exactly — identical hair, identical outfit and colors, identical face and proportions, identical rendering style — only the pose, expression, action, and camera angle change for this scene. Do not redesign or restyle the character in any way.",
+  "image": {
+    "model": "gpt-image-1-mini",
+    "size": "1536x1024",
+    "quality": "medium",
+    "cropTo16x9": { "width": 1536, "height": 864, "x": 0, "y": 80 }
+  }
+}

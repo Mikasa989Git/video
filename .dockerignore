@@ -1,0 +1,7 @@
+.env.local
+output/
+models/
+config/styles/*_reference.png
+config/voice-samples/
+*.log
+.git

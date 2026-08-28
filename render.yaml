@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: video-engine
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_TTS_VOICE
+        value: onyx
+    disk:
+      name: video-engine-data
+      mountPath: /app/output
+      sizeGB: 10

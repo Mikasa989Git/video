@@ -1,0 +1,14 @@
+{
+  "name": "video-engine",
+  "version": "0.1.0",
+  "description": "Prompt-to-video automation engine: topic in, finished narrated video out.",
+  "private": true,
+  "main": "generate-video.js",
+  "scripts": {
+    "generate": "node generate-video.js",
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

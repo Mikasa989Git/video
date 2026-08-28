@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Engine</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="wave-bg" aria-hidden="true">
+    <svg class="wave wave-back" viewBox="0 0 2400 220" preserveAspectRatio="none"><path d="M0,110 C 200,180 400,40 600,110 C 800,180 1000,40 1200,110 C 1400,180 1600,40 1800,110 C 2000,180 2200,40 2400,110 L2400,220 L0,220 Z"/></svg>
+    <svg class="wave wave-mid" viewBox="0 0 2400 220" preserveAspectRatio="none"><path d="M0,130 C 200,60 400,190 600,130 C 800,60 1000,190 1200,130 C 1400,60 1600,190 1800,130 C 2000,60 2200,190 2400,130 L2400,220 L0,220 Z"/></svg>
+    <svg class="wave wave-front" viewBox="0 0 2400 220" preserveAspectRatio="none"><path d="M0,150 C 300,90 500,190 800,140 C 1100,90 1300,190 1600,140 C 1900,90 2100,190 2400,140 L2400,220 L0,220 Z"/></svg>
+  </div>
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">&#9679;</span>
+        <span class="brand-name">Video Engine</span>
+      </div>
+      <span class="topbar-tag">prompt &rarr; finished video</span>
+    </header>
+
+    <main class="stage-area">
+
+      <!-- VIEW 1: FORM -->
+      <section id="view-form" class="view card">
+        <h1>Make a video</h1>
+        <p class="subtitle">Fill in a topic and a length — everything else is optional.</p>
+
+        <form id="generate-form" novalidate>
+          <div class="field">
+            <label for="topic">Topic <span class="required">*</span></label>
+            <textarea id="topic" name="topic" rows="3" placeholder="e.g. why most people never build wealth" required></textarea>
+            <p class="field-error" data-for="topic">Topic is required.</p>
+          </div>
+
+          <div class="field">
+            <label>Length <span class="required">*</span></label>
+            <div class="length-picker" id="length-picker">
+              <button type="button" class="length-option" data-value="5">5 min</button>
+              <button type="button" class="length-option" data-value="10">10 min</button>
+              <button type="button" class="length-option" data-value="15">15 min</button>
+            </div>
+            <input type="hidden" id="length" name="length" required>
+            <p class="field-error" data-for="length">Pick a length.</p>
+          </div>
+
+          <div class="field">
+            <label>Voice <span class="optional">(optional — click &#9654; to hear a sample)</span></label>
+            <div class="voice-picker" id="voice-picker">
+              <label class="voice-option">
+                <input type="radio" name="voice" value="" checked>
+                <span class="voice-option-label">Default</span>
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" id="submit-btn" class="primary-btn" disabled>Generate Video</button>
+          <p id="form-server-error" class="server-error" hidden></p>
+        </form>
+      </section>
+
+      <!-- VIEW 2: PROGRESS -->
+      <section id="view-progress" class="view card" hidden>
+        <h1>Building your video</h1>
+        <p class="subtitle" id="progress-subtitle">Getting started&hellip;</p>
+
+        <ol class="stepper" id="stepper">
+          <li data-stage="script"><span class="step-dot"></span><span class="step-label">Writing script</span></li>
+          <li data-stage="voiceover"><span class="step-dot"></span><span class="step-label">Generating voiceover</span></li>
+          <li data-stage="segment"><span class="step-dot"></span><span class="step-label">Breaking into scenes</span></li>
+          <li data-stage="transcribe"><span class="step-dot"></span><span class="step-label">Analyzing timing</span></li>
+          <li data-stage="align"><span class="step-dot"></span><span class="step-label">Syncing scenes to audio</span></li>
+          <li data-stage="promptgen"><span class="step-dot"></span><span class="step-label">Directing visuals</span></li>
+          <li data-stage="images"><span class="step-dot"></span><span class="step-label">Generating images</span>
+            <div class="sub-progress" id="images-subprogress" hidden>
+              <div class="sub-progress-track"><div class="sub-progress-fill" id="images-fill"></div></div>
+              <span class="sub-progress-count" id="images-count"></span>
+            </div>
+          </li>
+          <li data-stage="assemble"><span class="step-dot"></span><span class="step-label">Assembling video</span></li>
+        </ol>
+
+        <div class="cost-tracker">
+          <span>Cost so far</span>
+          <span id="cost-value">$0.00</span>
+        </div>
+      </section>
+
+      <!-- VIEW 2.5: CHECKPOINT (script / voiceover / prompts review) -->
+      <section id="view-checkpoint" class="view card" hidden>
+        <h1 id="checkpoint-title">Review</h1>
+        <p class="subtitle" id="checkpoint-subtitle"></p>
+
+        <div id="checkpoint-script-block" hidden>
+          <textarea id="checkpoint-script-text" rows="14" class="review-textarea"></textarea>
+        </div>
+
+        <div id="checkpoint-voiceover-block" hidden>
+          <audio id="checkpoint-audio" controls></audio>
+        </div>
+
+        <div id="checkpoint-prompts-block" hidden>
+          <div class="prompts-summary" id="prompts-summary"></div>
+        </div>
+
+        <div class="field">
+          <label for="checkpoint-feedback">Feedback <span class="optional">(optional — describe what to change, then Request Changes)</span></label>
+          <textarea id="checkpoint-feedback" rows="2" placeholder="e.g. make it punchier, or use a different voice"></textarea>
+        </div>
+
+        <div class="result-actions">
+          <button id="checkpoint-approve-btn" class="primary-btn" type="button">Approve &amp; Continue</button>
+          <button id="checkpoint-regenerate-btn" class="secondary-btn" type="button">Request Changes</button>
+        </div>
+        <p id="checkpoint-server-error" class="server-error" hidden></p>
+      </section>
+
+      <!-- VIEW 3: RESULT -->
+      <section id="view-result" class="view card" hidden>
+        <h1>Your video is ready</h1>
+        <video id="result-video" controls></video>
+        <div class="result-actions">
+          <a id="download-link" class="primary-btn" download>Download</a>
+          <button id="make-another-btn" class="secondary-btn" type="button">Make Another Video</button>
+        </div>
+        <div class="cost-breakdown" id="cost-breakdown"></div>
+
+        <div class="revise-box">
+          <label for="revise-input">Want any changes?</label>
+          <textarea id="revise-input" rows="2" placeholder="Describe any change — wording, voice, a specific scene's picture, anything."></textarea>
+          <button id="revise-btn" class="primary-btn" type="button">Request Changes</button>
+          <p id="revise-server-error" class="server-error" hidden></p>
+        </div>
+      </section>
+
+      <!-- VIEW 4: ERROR -->
+      <section id="view-error" class="view card" hidden>
+        <h1>Something went wrong</h1>
+        <p class="subtitle error-message" id="error-message"></p>
+        <button id="error-back-btn" class="secondary-btn" type="button">Back to form</button>
+      </section>
+
+    </main>
+  </div>
+
+  <audio id="voice-preview-player" preload="none"></audio>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+.env.local
+node_modules/
+output/
+models/
+config/styles/*_reference.png
+config/voice-samples/
+*.log

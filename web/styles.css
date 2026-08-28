@@ -1,0 +1,378 @@
+:root {
+  --bg: #0b0d12;
+  --bg-grad-a: #0b0d12;
+  --bg-grad-b: #141726;
+  --card: #14161f;
+  --card-border: #262a3a;
+  --text: #eef0f6;
+  --text-dim: #9298ad;
+  --accent: #7c6cf6;
+  --accent-2: #48d6b3;
+  --accent-gold: #f2b84b;
+  --danger: #f0607a;
+  --field-bg: #0f1119;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+  background: radial-gradient(circle at 20% 0%, var(--bg-grad-b), var(--bg-grad-a) 60%);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Animated wave background — three layers drifting at different speeds/opacities for
+   depth. Each <svg>'s path repeats every 25% of its own width, so animating exactly
+   -50% (translateX) loops seamlessly with no visible seam. Purely decorative/ambient,
+   kept low-opacity so it never competes with the form on top of it. */
+.wave-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.wave { position: absolute; bottom: 0; left: 0; width: 200%; height: 34vh; min-height: 220px; }
+.wave path { fill: currentColor; }
+.wave-back { color: var(--accent); opacity: 0.10; animation: wave-drift 22s linear infinite; }
+.wave-mid { color: var(--accent-2); opacity: 0.09; animation: wave-drift 16s linear infinite reverse; }
+.wave-front { color: var(--accent); opacity: 0.14; animation: wave-drift 11s linear infinite; }
+@keyframes wave-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wave { animation: none !important; }
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1.05rem; }
+.brand-mark {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 1.4rem;
+}
+.topbar-tag { color: var(--text-dim); font-size: 0.85rem; }
+
+.stage-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.card {
+  width: 100%;
+  max-width: 560px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+  background-color: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 40px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+
+.view[hidden] { display: none; }
+
+h1 { margin: 0 0 8px; font-size: 1.5rem; letter-spacing: -0.01em; }
+.subtitle { margin: 0 0 28px; color: var(--text-dim); font-size: 0.95rem; }
+
+.field { margin-bottom: 20px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; color: var(--text); }
+.required { color: var(--danger); }
+.optional { color: var(--text-dim); font-weight: 400; }
+
+textarea, input[type="number"], select {
+  width: 100%;
+  background: var(--field-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+textarea:focus, input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.25);
+}
+textarea { resize: vertical; min-height: 64px; }
+
+.field.invalid textarea, .field.invalid input { border-color: var(--danger); }
+.field-error { display: none; color: var(--danger); font-size: 0.8rem; margin: 6px 0 0; }
+.field.invalid .field-error { display: block; }
+
+.primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), #5a4ce0);
+  color: white;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+.primary-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.primary-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.secondary-btn {
+  width: 100%;
+  padding: 14px 20px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.secondary-btn:hover { border-color: var(--accent); }
+
+.server-error { color: var(--danger); font-size: 0.85rem; margin-top: 14px; text-align: center; }
+.server-error[hidden] { display: none; }
+
+/* Length picker */
+.length-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.length-option {
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: var(--field-bg);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.length-option:hover { border-color: var(--accent); color: var(--text); }
+.length-option.selected {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(124,108,246,0.18), rgba(72,214,179,0.12));
+  color: var(--text);
+}
+.field.invalid .length-option { border-color: var(--danger); }
+
+/* Voice picker */
+.voice-picker { display: flex; flex-direction: column; gap: 6px; }
+.voice-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: var(--field-bg);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.voice-option:has(input:checked) { border-color: var(--accent); background: rgba(124, 108, 246, 0.08); }
+.voice-option input[type="radio"] { accent-color: var(--accent); width: 16px; height: 16px; flex-shrink: 0; }
+.voice-option-label { flex: 1; font-size: 0.9rem; }
+
+.voice-play-btn {
+  width: 30px; height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.voice-play-btn:hover { border-color: var(--accent); color: var(--text); }
+.voice-play-btn.loading { color: var(--accent); animation: pulse-opacity 0.8s ease-in-out infinite; }
+.voice-play-btn.playing { border-color: var(--accent-2); color: var(--accent-2); background: rgba(72, 214, 179, 0.12); }
+@keyframes pulse-opacity { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* Stepper — a connecting rail links each dot to the next (hidden after the last item),
+   turning solid as each stage completes, like a real assembly-line progress track. */
+.stepper { list-style: none; margin: 0 0 28px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.stepper li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  color: var(--text-dim);
+  transition: background 0.25s ease, color 0.25s ease;
+  flex-wrap: wrap;
+}
+.stepper li.active {
+  color: var(--text);
+  font-weight: 600;
+  background: linear-gradient(90deg, rgba(124,108,246,0.10), transparent 70%);
+}
+.stepper li.done { color: var(--accent-2); }
+
+.step-dot {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--card-border);
+  flex-shrink: 0;
+  position: relative;
+  transition: border-color 0.25s ease, background 0.25s ease;
+}
+.step-dot::before {
+  content: '';
+  position: absolute;
+  top: 100%; left: 50%;
+  transform: translateX(-50%);
+  width: 2px; height: 28px;
+  background: var(--card-border);
+  transition: background 0.4s ease;
+  z-index: -1;
+}
+.stepper li:last-child .step-dot::before { display: none; }
+.stepper li.done .step-dot::before { background: var(--accent-2); }
+.stepper li.active .step-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(124, 108, 246, 0.2);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.stepper li.done .step-dot {
+  border-color: var(--accent-2);
+  background: var(--accent-2);
+}
+.stepper li.done .step-dot::after {
+  content: '';
+  position: absolute;
+  left: 6px; top: 2px;
+  width: 4px; height: 9px;
+  border: solid #05140f;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(124, 108, 246, 0.2); }
+  50% { box-shadow: 0 0 0 8px rgba(124, 108, 246, 0.08); }
+}
+
+.step-label { font-size: 0.95rem; font-weight: 500; }
+
+.sub-progress { width: 100%; margin-top: 8px; display: flex; align-items: center; gap: 10px; }
+.sub-progress[hidden] { display: none; }
+.sub-progress-track { flex: 1; height: 6px; background: var(--field-bg); border-radius: 4px; overflow: hidden; }
+.sub-progress-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,0.16) 0 8px, transparent 8px 16px), linear-gradient(90deg, var(--accent), var(--accent-2));
+  background-size: 32px 32px, 100% 100%;
+  transition: width 0.3s ease;
+  animation: stripe-move 1s linear infinite;
+}
+@keyframes stripe-move { from { background-position: 0 0, 0 0; } to { background-position: 32px 0, 0 0; } }
+.sub-progress-count { font-size: 0.78rem; color: var(--text-dim); white-space: nowrap; }
+
+.cost-tracker {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--field-bg);
+  border: 1px solid var(--card-border);
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+#cost-value { color: var(--accent-gold); font-weight: 700; font-size: 1.05rem; }
+
+/* Result view */
+#result-video { width: 100%; border-radius: 10px; margin-bottom: 20px; background: black; }
+.result-actions { display: flex; gap: 12px; margin-bottom: 20px; }
+.result-actions .primary-btn, .result-actions .secondary-btn { width: auto; flex: 1; }
+
+.cost-breakdown { border-top: 1px solid var(--card-border); padding-top: 16px; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 20px; }
+.cost-breakdown-row { display: flex; justify-content: space-between; padding: 4px 0; }
+.cost-breakdown-row.total { color: var(--text); font-weight: 700; border-top: 1px solid var(--card-border); margin-top: 6px; padding-top: 10px; }
+
+.error-message { color: var(--danger); font-family: ui-monospace, monospace; font-size: 0.85rem; }
+
+/* Checkpoint (review) view */
+.review-textarea {
+  width: 100%;
+  min-height: 260px;
+  background: var(--field-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 14px;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 20px;
+}
+.review-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.25); }
+
+#checkpoint-voiceover-block { margin-bottom: 20px; }
+#checkpoint-audio { width: 100%; }
+
+.prompts-summary { margin-bottom: 20px; font-size: 0.9rem; color: var(--text-dim); }
+.prompts-summary p { margin: 0 0 10px; color: var(--text); }
+.prompts-summary-row {
+  padding: 8px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--field-bg);
+  margin-bottom: 6px;
+}
+.prompts-summary-row strong { color: var(--accent-2); }
+
+/* Revise box */
+.revise-box { border-top: 1px solid var(--card-border); padding-top: 20px; }
+.revise-box label { display: block; margin-bottom: 8px; }
+.revise-box textarea {
+  width: 100%;
+  background: var(--field-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 10px;
+}
+.revise-box textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.25); }
+.revise-box .primary-btn { width: 100%; }
+
+@media (max-width: 480px) {
+  .card { padding: 28px 20px; }
+  .field-row { grid-template-columns: 1fr; }
+}
