@@ -11,7 +11,7 @@
 const path = require('path');
 const { ensureDir, slugify, ROOT } = require('./util');
 const { runPipeline } = require('./pipeline');
-const { supabase } = require('./auth');
+const { supabase, SKIP_AUTH } = require('./auth');
 
 // jobId -> { id, dir, userId, topic, lengthMinutes, voiceId,
 //            status: 'running'|'awaiting-approval'|'done'|'error',
@@ -56,12 +56,12 @@ function runJob(jobId) {
     { topic: job.topic, lengthMinutes: job.lengthMinutes, voiceId: job.voiceId, jobDir: job.dir },
     makeOnProgress(jobId)
   ).then(async () => {
-    await supabase().from('video_jobs').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', jobId);
+    if (!SKIP_AUTH) await supabase().from('video_jobs').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', jobId);
   }).catch(async () => {
     // runPipeline already emitted an 'error' progress event before rejecting; just make
     // sure an unhandled rejection doesn't crash the server, and that the persisted record
     // reflects the failure too.
-    await supabase().from('video_jobs').update({ status: 'error' }).eq('id', jobId).catch(() => {});
+    if (!SKIP_AUTH) await supabase().from('video_jobs').update({ status: 'error' }).eq('id', jobId).catch(() => {});
   });
 }
 
@@ -70,7 +70,7 @@ async function startJob({ userId, topic, lengthMinutes, voiceId }) {
   const jobDir = path.join(ROOT, 'output', jobId);
   ensureDir(jobDir);
   jobs.set(jobId, { id: jobId, dir: jobDir, userId, topic, lengthMinutes, voiceId, status: 'running', events: [], sseClients: [], pendingApproval: null, startedAt: Date.now() });
-  await supabase().from('video_jobs').insert({ id: jobId, user_id: userId, topic, length_minutes: lengthMinutes, status: 'running', job_dir: jobDir });
+  if (!SKIP_AUTH) await supabase().from('video_jobs').insert({ id: jobId, user_id: userId, topic, length_minutes: lengthMinutes, status: 'running', job_dir: jobDir });
   runJob(jobId);
   return jobId;
 }

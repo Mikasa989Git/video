@@ -13,7 +13,7 @@ const { loadEnv, ensureDir, slugify, ROOT } = require('./src/util');
 const { runPipeline } = require('./src/pipeline');
 const { ensureVoiceSample } = require('./src/tts');
 const { planRevision } = require('./src/revise');
-const { verifyRequestAuth, verifyToken, supabase } = require('./src/auth');
+const { verifyRequestAuth, verifyToken, supabase, SKIP_AUTH } = require('./src/auth');
 const { startJob, getJob, runJob, markAllRunningJobsErrored, getActiveJobForUser } = require('./src/jobs');
 const payplus = require('./src/payplus');
 
@@ -112,6 +112,10 @@ function applyRevisionPlan(jobDir, plan) {
 // billing period forward (and zeroing usage) if it's expired — a pull-based reset instead
 // of a separate cron job, checked the one place usage actually matters.
 async function getActiveSubscription(userId) {
+  if (SKIP_AUTH) {
+    const tier = tierById('studio') || PRICING_TIERS[PRICING_TIERS.length - 1];
+    return { id: 'skip-auth', user_id: userId, tier_id: tier.id, status: 'active', videos_used_current_period: 0, current_period_start: new Date().toISOString(), current_period_end: new Date(Date.now() + 30 * 86400000).toISOString(), tier };
+  }
   const { data: sub } = await supabase().from('subscriptions').select('*').eq('user_id', userId).eq('status', 'active').maybeSingle();
   if (!sub) return null;
   const tier = tierById(sub.tier_id);
@@ -157,7 +161,7 @@ const server = http.createServer(async (req, res) => {
     // browser app ships them) — this just avoids needing a build step to inject them into
     // static JS. Never expose SUPABASE_SERVICE_ROLE_KEY this way; that one stays server-only.
     if (req.method === 'GET' && url.pathname === '/api/public-config') {
-      return sendJson(res, 200, { supabaseUrl: process.env.SUPABASE_URL, supabaseAnonKey: process.env.SUPABASE_ANON_KEY });
+      return sendJson(res, 200, { supabaseUrl: process.env.SUPABASE_URL, supabaseAnonKey: process.env.SUPABASE_ANON_KEY, authDisabled: SKIP_AUTH });
     }
 
     if (req.method === 'GET' && url.pathname.startsWith('/api/voice-sample/')) {
@@ -270,7 +274,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const jobId = await startJob({ userId: auth.userId, topic: String(topic).trim(), lengthMinutes: Number(lengthMinutes), voiceId: voiceId || undefined });
-      await supabase().from('subscriptions').update({ videos_used_current_period: subscription.videos_used_current_period + 1 }).eq('id', subscription.id);
+      if (!SKIP_AUTH) await supabase().from('subscriptions').update({ videos_used_current_period: subscription.videos_used_current_period + 1 }).eq('id', subscription.id);
       return sendJson(res, 200, { jobId });
     }
 

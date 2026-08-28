@@ -7,6 +7,16 @@
 const { createClient } = require('@supabase/supabase-js');
 const { requireEnvOrThrow } = require('./util');
 
+// Test-only escape hatch for trying the product before Supabase/PayPlus are set up (e.g.
+// a quick friend demo) — never on by default, and deliberately loud about it in logs.
+// Risk, made explicit: with this on, EVERY request is treated as the same fixed user (no
+// real login wall, no per-visitor isolation) and there is no usage cap — anyone who can
+// reach the deployed URL can generate videos on your API keys' real money. Turn it off
+// (unset the env var, redeploy) as soon as the test is done.
+const SKIP_AUTH = process.env.SKIP_AUTH === 'true';
+const SKIP_AUTH_USER = { userId: 'skip-auth-test-user', email: 'test@local' };
+if (SKIP_AUTH) console.warn('[auth] SKIP_AUTH=true — authentication is DISABLED. Every request is treated as the same test user. Do not leave this on.');
+
 let _client = null;
 function supabase() {
   if (!_client) {
@@ -18,6 +28,7 @@ function supabase() {
 // Returns { userId, email } for a valid access token, or null (never throws — callers
 // should treat null as "not authenticated" and respond 401).
 async function verifyToken(token) {
+  if (SKIP_AUTH) return SKIP_AUTH_USER;
   if (!token) return null;
   try {
     const { data, error } = await supabase().auth.getUser(token);
@@ -36,4 +47,4 @@ async function verifyRequestAuth(req) {
   return verifyToken(token);
 }
 
-module.exports = { supabase, verifyRequestAuth, verifyToken };
+module.exports = { supabase, verifyRequestAuth, verifyToken, SKIP_AUTH };

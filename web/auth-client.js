@@ -5,12 +5,19 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 let _client = null;
 let _clientPromise = null;
+let _configPromise = null;
+
+// Cached — every function below needs this, and it never changes within a page load.
+async function getConfig() {
+  if (!_configPromise) _configPromise = fetch('/api/public-config').then(r => r.json());
+  return _configPromise;
+}
 
 async function getClient() {
   if (_client) return _client;
   if (!_clientPromise) {
     _clientPromise = (async () => {
-      const cfg = await (await fetch('/api/public-config')).json();
+      const cfg = await getConfig();
       if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) {
         throw new Error('Supabase is not configured on the server (missing SUPABASE_URL/SUPABASE_ANON_KEY).');
       }
@@ -21,10 +28,15 @@ async function getClient() {
   return _clientPromise;
 }
 
+const SKIP_AUTH_SESSION = { access_token: null, user: { email: 'test@local' } };
+
 // Used on every page just to decide "signed in or not" for nav/CTA state — if Supabase
 // itself isn't configured yet (e.g. before SUPABASE_URL/SUPABASE_ANON_KEY are set), that
-// should read as "not signed in," not an uncaught error breaking the whole page.
+// should read as "not signed in," not an uncaught error breaking the whole page. If the
+// server has SKIP_AUTH on (see src/auth.js), everyone reads as already signed in.
 export async function getSession() {
+  const cfg = await getConfig();
+  if (cfg.authDisabled) return SKIP_AUTH_SESSION;
   try {
     const client = await getClient();
     const { data: { session } } = await client.auth.getSession();
@@ -51,6 +63,8 @@ export async function signIn(email, password) {
 }
 
 export async function signOut() {
+  const cfg = await getConfig();
+  if (cfg.authDisabled) { window.location.href = '/'; return; } // nothing to actually sign out of
   const client = await getClient();
   await client.auth.signOut();
   window.location.href = '/login.html';
