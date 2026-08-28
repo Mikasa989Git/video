@@ -67,6 +67,10 @@ RUN ldconfig
 RUN ffmpeg -version | grep -q whisper 2>/dev/null || echo "warning: 'whisper' not found in ffmpeg -buildconf output — check the ffmpeg build stage"
 
 WORKDIR /app
+# Copied separately from the rest of the app so this layer (and npm ci) is only
+# re-run when the dependency list actually changes, not on every code edit.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 COPY . .
 # Fetched at build time rather than committed to git — it's 142MB, over GitHub's 100MB
 # per-file limit, so keeping it out of the repo avoids needing Git LFS.
