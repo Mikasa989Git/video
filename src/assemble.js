@@ -52,7 +52,17 @@ function assembleVideo(alignedShots, imagesDir, audioPath, outputPath, style) {
     outputPath,
   ];
   console.log('  [assemble] running ffmpeg...');
-  execFileSync(ffmpegPath(), args, { stdio: 'inherit' });
+  try {
+    execFileSync(ffmpegPath(), args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (err) {
+    // stdio:'inherit' (the previous setting) streamed ffmpeg's real output straight to the
+    // server's own console but never captured it, so a failure here surfaced to the client
+    // as Node's bare "Command failed: ffmpeg ..." — the command itself, no actual reason.
+    const stderr = (err.stderr || '').toString();
+    console.error(stderr); // keep it visible in server logs, same as stdio:'inherit' did
+    const status = err.signal ? `killed by signal ${err.signal}` : `exit code ${err.status}`;
+    throw new Error(`ffmpeg assemble failed (${status}): ${stderr.slice(-2000) || err.message}`);
+  }
   return outputPath;
 }
 

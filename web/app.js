@@ -233,15 +233,12 @@ const checkpointScriptBlock = document.getElementById('checkpoint-script-block')
 const checkpointScriptText = document.getElementById('checkpoint-script-text');
 const checkpointVoiceoverBlock = document.getElementById('checkpoint-voiceover-block');
 const checkpointAudio = document.getElementById('checkpoint-audio');
-const checkpointPromptsBlock = document.getElementById('checkpoint-prompts-block');
-const promptsSummaryEl = document.getElementById('prompts-summary');
 const checkpointFeedback = document.getElementById('checkpoint-feedback');
 const checkpointServerError = document.getElementById('checkpoint-server-error');
 
 const CHECKPOINT_INFO = {
   script: { title: 'Review the script', subtitle: 'Read it over, edit anything directly, then approve to continue.' },
   voiceover: { title: 'Review the voiceover', subtitle: 'Listen to the narration before it goes to image generation.' },
-  promptgen: { title: 'Review the visual direction', subtitle: "Here's a preview of the planned scenes before generating all the images." },
 };
 
 let currentCheckpointStage = null;
@@ -256,16 +253,11 @@ async function showCheckpoint(evt) {
 
   checkpointScriptBlock.hidden = evt.stage !== 'script';
   checkpointVoiceoverBlock.hidden = evt.stage !== 'voiceover';
-  checkpointPromptsBlock.hidden = evt.stage !== 'promptgen';
 
   if (evt.stage === 'script') {
     checkpointScriptText.value = evt.content || '';
   } else if (evt.stage === 'voiceover') {
     checkpointAudio.src = await withToken(`/api/current-audio?jobId=${encodeURIComponent(currentJobId)}&t=${Date.now()}`);
-  } else if (evt.stage === 'promptgen') {
-    const c = evt.content || {};
-    const sampleLines = (c.sample || []).map(s => `<div class="prompts-summary-row"><strong>Scene ${s.scene}</strong>${s.narrator ? ' (narrator)' : ''}: ${s.prompt}</div>`).join('');
-    promptsSummaryEl.innerHTML = `<p>${c.totalShots} scenes planned (${c.narratorShots} with the narrator on screen). First few:</p>${sampleLines}`;
   }
 
   showView('checkpoint');
@@ -281,6 +273,10 @@ async function submitApproval(body) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    // Otherwise this still reads whatever the just-finished stage's "start" event last set
+    // it to (e.g. "Generating voiceover…") until the next stage's own event arrives —
+    // misleadingly implying that stage is still running right after it was approved.
+    progressSubtitle.textContent = 'Continuing…';
     showView('progress');
   } catch (err) {
     checkpointServerError.textContent = err.message;

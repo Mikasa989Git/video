@@ -347,17 +347,6 @@ textarea { resize: vertical; min-height: 64px; }
 #checkpoint-voiceover-block { margin-bottom: 20px; }
 #checkpoint-audio { width: 100%; }
 
-.prompts-summary { margin-bottom: 20px; font-size: 0.9rem; color: var(--text-dim); }
-.prompts-summary p { margin: 0 0 10px; color: var(--text); }
-.prompts-summary-row {
-  padding: 8px 10px;
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
-  background: var(--field-bg);
-  margin-bottom: 6px;
-}
-.prompts-summary-row strong { color: var(--accent-2); }
-
 /* Revise box */
 .revise-box { border-top: 1px solid var(--card-border); padding-top: 20px; }
 .revise-box label { display: block; margin-bottom: 8px; }

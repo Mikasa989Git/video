@@ -173,25 +173,15 @@ async function runPipeline(options, onProgress = () => ({ approved: true })) {
     }
     onProgress({ stage: 'align', status: 'done' });
 
-    // 6. Generate image prompts — pauses for approval before the expensive images stage;
-    // a rejection with feedback regenerates the whole prompt set with that feedback folded in.
+    // 6. Generate image prompts — no client review (removed per feedback: the scene/prompt
+    // summary wasn't useful to look at before images exist to actually judge). Runs
+    // straight through into image generation.
     onProgress({ stage: 'promptgen', status: 'start' });
     let prompts;
     if (fs.existsSync(p.prompts)) {
       prompts = readJson(p.prompts);
     } else {
-      let feedback;
-      for (;;) {
-        prompts = await generateImagePrompts(shots, style, { costLedger: ledger, feedback });
-        const summary = {
-          totalShots: shots.length,
-          narratorShots: prompts.filter(x => x.narrator).length,
-          sample: prompts.slice(0, 5),
-        };
-        const result = await checkpoint(onProgress, 'promptgen', summary);
-        if (result.approved) break;
-        feedback = result.feedback;
-      }
+      prompts = await generateImagePrompts(shots, style, { costLedger: ledger });
       writeJson(p.prompts, prompts);
     }
     const shotsWithPrompts = shots.map(s => {
