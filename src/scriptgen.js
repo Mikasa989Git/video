@@ -70,8 +70,11 @@ async function generateScript(topic, { lengthMinutes = 8, feedback, wordTarget, 
   const json = await res.json();
   if (!res.ok) throw new Error(json.error?.message || `HTTP ${res.status}`);
   const text = json.content.map(c => c.text || '').join('');
+  if (!text.trim()) throw new Error(`Claude returned an empty response for "${topic}" (targetWords=${targetWords}) — stop_reason: ${json.stop_reason}`);
   const usage = json.usage || {};
-  return { script: sanitizeScript(text), usage };
+  const script = sanitizeScript(text);
+  if (!script) throw new Error(`Script came out empty after sanitizing Claude's response — raw response was: ${JSON.stringify(text.slice(0, 300))}`);
+  return { script, usage };
 }
 
 // Despite instructions, a model can still wrap output in a code fence or prepend a
@@ -82,8 +85,14 @@ function sanitizeScript(text) {
   t = t.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim();
   const lines = t.split(/\r?\n/);
   const preambleRe = /^(here'?s|here is|title:|script:|sure[,!]|certainly)/i;
-  while (lines.length && preambleRe.test(lines[0].trim())) lines.shift();
-  return lines.join('\n').trim();
+  let start = 0;
+  while (start < lines.length && preambleRe.test(lines[start].trim())) start++;
+  // Never let this strip the ENTIRE response — if every line matched "preamble", that
+  // means the match is wrong for this content, not that the content is disposable. Caught
+  // in production: a short, low-word-target script under length-fit retries got fully
+  // consumed by this loop, producing a silently empty script.
+  const stripped = lines.slice(start).join('\n').trim();
+  return stripped || t;
 }
 
 module.exports = { generateScript };
