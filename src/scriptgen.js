@@ -62,7 +62,15 @@ async function generateScript(topic, { lengthMinutes = 8, feedback, wordTarget, 
     },
     body: JSON.stringify({
       model,
-      max_tokens: 8192,
+      // This model produces a "thinking" block by default even with no explicit thinking
+      // param, and it shares the same max_tokens budget as the actual script text. Caught
+      // in production: for this system prompt, a single real call measured 1435 thinking
+      // tokens (vs. ~70 for a much shorter prompt) — on an unlucky draw that can run long
+      // enough to consume the whole budget before any visible text starts, producing a
+      // response with zero text content. Generous headroom here makes that rare rather
+      // than eliminating it outright; see the retry-on-empty-response handling in
+      // lengthfit.js's caller for the other half of the mitigation.
+      max_tokens: 16384,
       system: buildSystemPrompt(targetWords),
       messages: [{ role: 'user', content: userContent }],
     }),

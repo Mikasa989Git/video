@@ -34,6 +34,25 @@ async function synthesizeAndMeasure(scriptText, tmpPath, voiceId, ledger) {
   return ffprobeDuration(tmpPath);
 }
 
+// Claude's response for this prompt includes a "thinking" block by default, sharing the
+// same max_tokens budget as the actual script text — on a rare unlucky draw, thinking
+// alone can consume the whole budget before any visible text starts, and generateScript
+// throws rather than silently proceeding with nothing to synthesize (see scriptgen.js).
+// That's a transient, retry-and-it-usually-works failure, not a reason to abort the
+// entire job — caught in production, confirmed non-deterministic (an identical retry
+// with the same topic/wordTarget succeeded immediately).
+async function generateScriptWithRetry(topic, opts) {
+  const RETRIES = 2;
+  for (let i = 0; ; i++) {
+    try {
+      return await generateScript(topic, opts);
+    } catch (err) {
+      if (i >= RETRIES) throw err;
+      console.warn(`  [lengthfit] generateScript failed (${err.message}) — retrying (${i + 1}/${RETRIES})...`);
+    }
+  }
+}
+
 // Returns { scriptText, voiceoverPath, actualDur }. voiceoverPath is a real, already-
 // synthesized mp3 for scriptText — callers should reuse it (rename into place) rather
 // than paying to synthesize the same text again.
@@ -44,7 +63,7 @@ async function fitScriptToTargetLength({ topic, lengthMinutes, feedback, voiceId
   let scriptText, actualDur;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const { script, usage } = await generateScript(topic, { lengthMinutes, feedback, wordTarget });
+    const { script, usage } = await generateScriptWithRetry(topic, { lengthMinutes, feedback, wordTarget });
     scriptText = script;
     const usd = ((usage.input_tokens || 0) / 1000) * 0.003 + ((usage.output_tokens || 0) / 1000) * 0.015;
     const note = attempt === 1
