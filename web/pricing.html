@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pricing — Video Engine</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="wave-bg" aria-hidden="true">
+    <svg class="wave wave-back" viewBox="0 0 2400 220" preserveAspectRatio="none"><path d="M0,110 C 200,180 400,40 600,110 C 800,180 1000,40 1200,110 C 1400,180 1600,40 1800,110 C 2000,180 2200,40 2400,110 L2400,220 L0,220 Z"/></svg>
+    <svg class="wave wave-mid" viewBox="0 0 2400 220" preserveAspectRatio="none"><path d="M0,130 C 200,60 400,190 600,130 C 800,60 1000,190 1200,130 C 1400,60 1600,190 1800,130 C 2000,60 2200,190 2400,130 L2400,220 L0,220 Z"/></svg>
+    <svg class="wave wave-front" viewBox="0 0 2400 220" preserveAspectRatio="none"><path d="M0,150 C 300,90 500,190 800,140 C 1100,90 1300,190 1600,140 C 1900,90 2100,190 2400,140 L2400,220 L0,220 Z"/></svg>
+  </div>
+  <div class="page">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">&#9679;</span>
+        <span class="brand-name">Video Engine</span>
+      </a>
+      <nav class="topnav">
+        <a href="/app.html">My videos</a>
+        <button type="button" id="signout-btn" class="link-btn" hidden>Sign out</button>
+      </nav>
+    </header>
+
+    <main class="stage-area wide">
+      <section class="view card wide">
+        <h1>Choose your plan</h1>
+        <p class="subtitle">Monthly subscription. Cancel anytime.</p>
+
+        <p id="status-notice" class="subtitle" hidden></p>
+        <p id="current-plan-notice" class="subtitle" hidden></p>
+
+        <div class="tier-grid" id="tier-grid"></div>
+
+        <p id="pricing-server-error" class="server-error" hidden></p>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/pricing.js"></script>
+</body>
+</html>

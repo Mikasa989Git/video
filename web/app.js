@@ -1,3 +1,5 @@
+import { requireAuth, authedFetch, withToken, signOut } from './auth-client.js';
+
 const STAGES = ['script', 'voiceover', 'segment', 'transcribe', 'align', 'promptgen', 'images', 'assemble'];
 const STAGE_LABELS = {
   script: 'Writing script', voiceover: 'Generating voiceover', segment: 'Breaking into scenes',
@@ -17,7 +19,14 @@ function showView(name) {
   for (const key of Object.keys(views)) views[key].hidden = key !== name;
 }
 
-// --- populate optional voice picker + style dropdown ---
+document.getElementById('signout-btn').addEventListener('click', signOut);
+
+// The job this browser tab is currently tracking — set when a video is started, or
+// resumed from /api/me's activeJobId on load (each user's jobs live server-side keyed by
+// id now, rather than there being a single global job for the whole server).
+let currentJobId = null;
+
+// --- populate optional voice picker ---
 const previewPlayer = document.getElementById('voice-preview-player');
 let currentlyPlayingBtn = null;
 
@@ -61,7 +70,6 @@ async function loadOptions() {
     }
   } catch { /* voices are optional; leave just "Default" */ }
 }
-loadOptions();
 
 // --- form validation ---
 const topicEl = document.getElementById('topic');
@@ -78,7 +86,6 @@ function refreshSubmitState() {
 }
 topicEl.addEventListener('input', refreshSubmitState);
 lengthEl.addEventListener('input', refreshSubmitState);
-refreshSubmitState();
 
 document.querySelectorAll('.length-option').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -108,7 +115,7 @@ form.addEventListener('submit', async (e) => {
   submitBtn.textContent = 'Starting…';
 
   try {
-    const res = await fetch('/api/generate', {
+    const res = await authedFetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -119,6 +126,7 @@ form.addEventListener('submit', async (e) => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    currentJobId = data.jobId;
     startProgressView();
   } catch (err) {
     serverErrorEl.textContent = err.message;
@@ -175,12 +183,13 @@ function startProgressView() {
   connectProgressStream();
 }
 
-// Called once on page load too (not just after submitting), so reloading or opening the
-// page mid-run — or right after a job finished/failed — shows the real current state
-// instead of silently resetting to a blank form.
-function connectProgressStream() {
+// Called once on load too (after resuming currentJobId from /api/me), so reloading or
+// opening the page mid-run shows the real current state instead of a blank form.
+async function connectProgressStream() {
+  if (!currentJobId) return;
   if (eventSource) eventSource.close();
-  eventSource = new EventSource('/api/progress');
+  const url = await withToken(`/api/progress?jobId=${encodeURIComponent(currentJobId)}`);
+  eventSource = new EventSource(url);
   eventSource.onmessage = (e) => {
     const evt = JSON.parse(e.data);
     if (evt.stage === 'idle') return;
@@ -237,7 +246,7 @@ const CHECKPOINT_INFO = {
 
 let currentCheckpointStage = null;
 
-function showCheckpoint(evt) {
+async function showCheckpoint(evt) {
   currentCheckpointStage = evt.stage;
   const info = CHECKPOINT_INFO[evt.stage] || { title: 'Review', subtitle: '' };
   checkpointTitle.textContent = info.title;
@@ -252,7 +261,7 @@ function showCheckpoint(evt) {
   if (evt.stage === 'script') {
     checkpointScriptText.value = evt.content || '';
   } else if (evt.stage === 'voiceover') {
-    checkpointAudio.src = '/api/current-audio?t=' + Date.now();
+    checkpointAudio.src = await withToken(`/api/current-audio?jobId=${encodeURIComponent(currentJobId)}&t=${Date.now()}`);
   } else if (evt.stage === 'promptgen') {
     const c = evt.content || {};
     const sampleLines = (c.sample || []).map(s => `<div class="prompts-summary-row"><strong>Scene ${s.scene}</strong>${s.narrator ? ' (narrator)' : ''}: ${s.prompt}</div>`).join('');
@@ -265,10 +274,10 @@ function showCheckpoint(evt) {
 async function submitApproval(body) {
   checkpointServerError.hidden = true;
   try {
-    const res = await fetch('/api/approve', {
+    const res = await authedFetch('/api/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, jobId: currentJobId }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -300,8 +309,9 @@ const resultVideo = document.getElementById('result-video');
 const downloadLink = document.getElementById('download-link');
 const costBreakdownEl = document.getElementById('cost-breakdown');
 
-function showResult(evt) {
-  const videoUrl = `/api/video/${jobIdFromPath(evt.videoPath)}`;
+async function showResult(evt) {
+  const jobId = jobIdFromPath(evt.videoPath);
+  const videoUrl = await withToken(`/api/video/${jobId}`);
   resultVideo.src = videoUrl;
   downloadLink.href = videoUrl;
 
@@ -327,6 +337,7 @@ function jobIdFromPath(videoPath) {
 }
 
 document.getElementById('make-another-btn').addEventListener('click', () => {
+  currentJobId = null;
   form.reset();
   document.querySelectorAll('.field.invalid').forEach(f => f.classList.remove('invalid'));
   document.querySelectorAll('.length-option.selected').forEach(b => b.classList.remove('selected'));
@@ -351,10 +362,10 @@ reviseBtn.addEventListener('click', async () => {
   reviseBtn.disabled = true;
   reviseBtn.textContent = 'Applying…';
   try {
-    const res = await fetch('/api/revise', {
+    const res = await authedFetch('/api/revise', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instructions }),
+      body: JSON.stringify({ instructions, jobId: currentJobId }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -382,7 +393,32 @@ document.getElementById('error-back-btn').addEventListener('click', () => {
   showView('form');
 });
 
-// Check for an already-running, just-finished, or just-failed job as soon as the page
-// loads, so a reload (or a second browser opening the page) shows real current state
-// instead of resetting to a blank form.
-connectProgressStream();
+// --- boot: require auth + an active subscription before showing anything, then resume
+// whatever job (if any) this user already has in flight ---
+async function boot() {
+  const session = await requireAuth(); // redirects to /login.html if not signed in
+  if (!session) return;
+
+  refreshSubmitState();
+  loadOptions();
+
+  let me;
+  try {
+    me = await (await authedFetch('/api/me')).json();
+  } catch {
+    showError('Could not reach the server. Try reloading.');
+    return;
+  }
+  if (!me.subscription) {
+    window.location.href = '/pricing.html';
+    return;
+  }
+
+  if (me.activeJobId) {
+    currentJobId = me.activeJobId;
+    await connectProgressStream();
+  } else {
+    showView('form');
+  }
+}
+boot();

@@ -13,6 +13,24 @@ services:
         sync: false
       - key: ELEVENLABS_VOICE_ID
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: PAYPLUS_API_KEY
+        sync: false
+      - key: PAYPLUS_SECRET_KEY
+        sync: false
+      - key: PAYPLUS_TERMINAL_UID
+        sync: false
+      - key: PAYPLUS_PAYMENT_PAGE_UID
+        sync: false
+      - key: PAYPLUS_CASHIER_UID
+        sync: false
+      - key: PAYPLUS_ENV
+        value: staging
     disk:
       name: video-engine-data
       mountPath: /app/output

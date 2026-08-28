@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// Local web UI for the video engine. Plain Node `http`, no framework/dependencies —
-// consistent with the rest of this project. One video generation at a time.
+// Web UI + API for the video engine. Plain Node `http`, no framework — the one dependency
+// this project has ever needed is @supabase/supabase-js, for auth/session verification and
+// the database (see the "Accounts, Subscriptions & Multi-User" plan). Multiple users can
+// generate videos at the same time; each job is scoped to the user who started it.
 //
 // Usage: node server.js [--port 3939]
 
@@ -11,6 +13,9 @@ const { loadEnv, ensureDir, slugify, ROOT } = require('./src/util');
 const { runPipeline } = require('./src/pipeline');
 const { ensureVoiceSample } = require('./src/tts');
 const { planRevision } = require('./src/revise');
+const { verifyRequestAuth, verifyToken, supabase } = require('./src/auth');
+const { startJob, getJob, runJob, markAllRunningJobsErrored, getActiveJobForUser } = require('./src/jobs');
+const payplus = require('./src/payplus');
 
 loadEnv();
 
@@ -25,54 +30,8 @@ const PORT = (() => {
 const WEB_DIR = path.join(__dirname, 'web');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.mp4': 'video/mp4', '.mp3': 'audio/mpeg' };
 
-// --- single-job in-memory state ---
-// { id, dir, topic, lengthMinutes, voiceId, status: 'running'|'awaiting-approval'|'done'|'error',
-//   events: [], sseClients: [], pendingApproval: { stage, resolve } | null }
-let currentJob = null;
-
-function broadcast(event) {
-  if (!currentJob) return;
-  currentJob.events.push(event);
-  const line = `data: ${JSON.stringify(event)}\n\n`;
-  for (const res of currentJob.sseClients) res.write(line);
-}
-
-function onProgress(evt) {
-  if (evt.status === 'checkpoint') {
-    currentJob.status = 'awaiting-approval';
-    broadcast(evt);
-    return new Promise((resolve) => {
-      currentJob.pendingApproval = { stage: evt.stage, resolve };
-    }).then((result) => {
-      currentJob.status = 'running';
-      currentJob.pendingApproval = null;
-      return result;
-    });
-  }
-  if (evt.stage === 'complete') currentJob.status = 'done';
-  if (evt.stage === 'error') currentJob.status = 'error';
-  broadcast(evt);
-}
-
-function runJob() {
-  runPipeline(
-    { topic: currentJob.topic, lengthMinutes: currentJob.lengthMinutes, voiceId: currentJob.voiceId, jobDir: currentJob.dir },
-    onProgress
-  ).catch(() => {
-    // runPipeline already emitted an 'error' progress event before rejecting; nothing
-    // further to do here besides making sure an unhandled rejection doesn't crash the
-    // server process.
-  });
-}
-
-function startJob({ topic, lengthMinutes, voiceId }) {
-  const jobId = `${slugify(topic)}-${Date.now()}`;
-  const jobDir = path.join(ROOT, 'output', jobId);
-  ensureDir(jobDir);
-  currentJob = { id: jobId, dir: jobDir, topic, lengthMinutes, voiceId, status: 'running', events: [], sseClients: [], pendingApproval: null };
-  runJob();
-  return jobId;
-}
+const PRICING_TIERS = JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'pricing-tiers.json'), 'utf8')).tiers;
+function tierById(id) { return PRICING_TIERS.find(t => t.id === id) || null; }
 
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
@@ -149,6 +108,37 @@ function applyRevisionPlan(jobDir, plan) {
   throw new Error(`Unknown revision scope "${plan.scope}"`);
 }
 
+// Fetches the caller's active subscription (with its tier merged in), lazily rolling the
+// billing period forward (and zeroing usage) if it's expired — a pull-based reset instead
+// of a separate cron job, checked the one place usage actually matters.
+async function getActiveSubscription(userId) {
+  const { data: sub } = await supabase().from('subscriptions').select('*').eq('user_id', userId).eq('status', 'active').maybeSingle();
+  if (!sub) return null;
+  const tier = tierById(sub.tier_id);
+  if (!tier) return null;
+
+  if (new Date(sub.current_period_end) < new Date()) {
+    const newStart = new Date();
+    const newEnd = new Date(newStart);
+    newEnd.setMonth(newEnd.getMonth() + 1);
+    sub.videos_used_current_period = 0;
+    sub.current_period_start = newStart.toISOString();
+    sub.current_period_end = newEnd.toISOString();
+    await supabase().from('subscriptions').update({
+      videos_used_current_period: 0,
+      current_period_start: sub.current_period_start,
+      current_period_end: sub.current_period_end,
+    }).eq('id', sub.id);
+  }
+
+  return { ...sub, tier };
+}
+
+function originFor(req) {
+  const proto = req.headers['x-forwarded-proto'] || 'http';
+  return `${proto}://${req.headers.host}`;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
@@ -157,6 +147,17 @@ const server = http.createServer(async (req, res) => {
       const voicesPath = path.join(ROOT, 'config', 'voices.json');
       const data = JSON.parse(fs.readFileSync(voicesPath, 'utf8'));
       return sendJson(res, 200, data.voices || []);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/pricing-tiers') {
+      return sendJson(res, 200, PRICING_TIERS);
+    }
+
+    // SUPABASE_URL/SUPABASE_ANON_KEY are meant to be public (that's how every Supabase
+    // browser app ships them) — this just avoids needing a build step to inject them into
+    // static JS. Never expose SUPABASE_SERVICE_ROLE_KEY this way; that one stays server-only.
+    if (req.method === 'GET' && url.pathname === '/api/public-config') {
+      return sendJson(res, 200, { supabaseUrl: process.env.SUPABASE_URL, supabaseAnonKey: process.env.SUPABASE_ANON_KEY });
     }
 
     if (req.method === 'GET' && url.pathname.startsWith('/api/voice-sample/')) {
@@ -169,10 +170,91 @@ const server = http.createServer(async (req, res) => {
       return res.end(content);
     }
 
+    // --- account / billing routes ---
+
+    if (req.method === 'GET' && url.pathname === '/api/me') {
+      const auth = await verifyRequestAuth(req);
+      if (!auth) return sendJson(res, 401, { error: 'not signed in' });
+      const subscription = await getActiveSubscription(auth.userId);
+      const activeJob = getActiveJobForUser(auth.userId);
+      return sendJson(res, 200, { email: auth.email, subscription, activeJobId: activeJob ? activeJob.id : null });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/subscribe') {
+      const auth = await verifyRequestAuth(req);
+      if (!auth) return sendJson(res, 401, { error: 'not signed in' });
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const tier = tierById(body.tierId);
+      if (!tier) return sendJson(res, 400, { error: 'unknown tier' });
+
+      const origin = originFor(req);
+      const link = await payplus.createPaymentLink({
+        userId: auth.userId,
+        tier,
+        email: auth.email,
+        customerName: auth.email,
+        successUrl: `${origin}/pricing.html?status=success`,
+        failureUrl: `${origin}/pricing.html?status=failure`,
+        callbackUrl: `${origin}/api/webhooks/payplus`,
+      });
+      return sendJson(res, 200, { paymentPageLink: link });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/webhooks/payplus') {
+      const raw = await readBody(req);
+      const body = JSON.parse(raw || '{}');
+      const verified = payplus.verifyCallbackSignature(body, req.headers['hash'], req.headers['user-agent']);
+      if (!verified) { res.writeHead(401); return res.end('invalid signature'); }
+
+      const parsed = payplus.parseCallbackPayload(body);
+      if (!parsed.success || !parsed.userId || !parsed.tierId) { res.writeHead(200); return res.end('ignored'); }
+
+      // Idempotency: PayPlus may retry a callback; only act on a transaction uid once.
+      const { error: dupeErr } = await supabase().from('payplus_events').insert({
+        event_uid: parsed.transactionUid, event_type: 'charge', payload: body,
+      });
+      if (dupeErr) { res.writeHead(200); return res.end('already processed'); } // unique constraint hit
+
+      const tier = tierById(parsed.tierId);
+      const recurringUid = await payplus.createRecurringSubscription({
+        cardToken: parsed.cardToken, customerUid: parsed.customerUid, tier,
+      });
+
+      const now = new Date();
+      const periodEnd = new Date(now); periodEnd.setMonth(periodEnd.getMonth() + 1);
+      await supabase().from('subscriptions').upsert({
+        user_id: parsed.userId,
+        tier_id: tier.id,
+        status: 'active',
+        payplus_recurring_uid: recurringUid,
+        payplus_card_token: parsed.cardToken,
+        current_period_start: now.toISOString(),
+        current_period_end: periodEnd.toISOString(),
+        videos_used_current_period: 0,
+      }, { onConflict: 'user_id' });
+
+      res.writeHead(200); return res.end('ok');
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/subscription/cancel') {
+      const auth = await verifyRequestAuth(req);
+      if (!auth) return sendJson(res, 401, { error: 'not signed in' });
+      const sub = await getActiveSubscription(auth.userId);
+      if (!sub) return sendJson(res, 409, { error: 'no active subscription' });
+      if (sub.payplus_recurring_uid) await payplus.cancelSubscription(sub.payplus_recurring_uid);
+      await supabase().from('subscriptions').update({ status: 'canceled' }).eq('id', sub.id);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // --- video generation routes (all scoped to the authenticated user) ---
+
     if (req.method === 'POST' && url.pathname === '/api/generate') {
-      if (currentJob && (currentJob.status === 'running' || currentJob.status === 'awaiting-approval')) {
-        return sendJson(res, 409, { error: 'A video is already generating. Wait for it to finish first.' });
-      }
+      const auth = await verifyRequestAuth(req);
+      if (!auth) return sendJson(res, 401, { error: 'not signed in' });
+
+      const subscription = await getActiveSubscription(auth.userId);
+      if (!subscription) return sendJson(res, 402, { error: 'No active subscription — subscribe to a plan first.' });
+
       const body = JSON.parse((await readBody(req)) || '{}');
       const { topic, lengthMinutes, voiceId } = body;
       if (!topic || !String(topic).trim()) return sendJson(res, 400, { error: 'topic is required' });
@@ -180,16 +262,26 @@ const server = http.createServer(async (req, res) => {
       if (!ALLOWED_LENGTHS.includes(Number(lengthMinutes))) {
         return sendJson(res, 400, { error: `lengthMinutes must be one of ${ALLOWED_LENGTHS.join(', ')}` });
       }
-      const jobId = startJob({ topic: String(topic).trim(), lengthMinutes: Number(lengthMinutes), voiceId: voiceId || undefined });
+      if (Number(lengthMinutes) > subscription.tier.max_video_length_minutes) {
+        return sendJson(res, 403, { error: `Your plan (${subscription.tier.name}) supports up to ${subscription.tier.max_video_length_minutes} minute videos.` });
+      }
+      if (subscription.videos_used_current_period >= subscription.tier.included_videos_per_month) {
+        return sendJson(res, 403, { error: `You've used all ${subscription.tier.included_videos_per_month} videos included in your plan this period.` });
+      }
+
+      const jobId = await startJob({ userId: auth.userId, topic: String(topic).trim(), lengthMinutes: Number(lengthMinutes), voiceId: voiceId || undefined });
+      await supabase().from('subscriptions').update({ videos_used_current_period: subscription.videos_used_current_period + 1 }).eq('id', subscription.id);
       return sendJson(res, 200, { jobId });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/approve') {
-      if (!currentJob || !currentJob.pendingApproval) {
-        return sendJson(res, 409, { error: 'No checkpoint is currently awaiting approval.' });
-      }
+      const auth = await verifyRequestAuth(req);
+      if (!auth) return sendJson(res, 401, { error: 'not signed in' });
       const body = JSON.parse((await readBody(req)) || '{}');
-      const { resolve } = currentJob.pendingApproval;
+      const job = getJob(body.jobId);
+      if (!job || job.userId !== auth.userId) return sendJson(res, 404, { error: 'job not found' });
+      if (!job.pendingApproval) return sendJson(res, 409, { error: 'No checkpoint is currently awaiting approval.' });
+      const { resolve } = job.pendingApproval;
       if (body.approved) {
         resolve({ approved: true, content: body.editedContent, voiceId: body.voiceId });
       } else {
@@ -199,14 +291,16 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/revise') {
-      if (!currentJob || currentJob.status !== 'done') {
-        return sendJson(res, 409, { error: 'No completed video to revise right now.' });
-      }
+      const auth = await verifyRequestAuth(req);
+      if (!auth) return sendJson(res, 401, { error: 'not signed in' });
       const body = JSON.parse((await readBody(req)) || '{}');
+      const job = getJob(body.jobId);
+      if (!job || job.userId !== auth.userId) return sendJson(res, 404, { error: 'job not found' });
+      if (job.status !== 'done') return sendJson(res, 409, { error: 'No completed video to revise right now.' });
       const instructions = String(body.instructions || '').trim();
       if (!instructions) return sendJson(res, 400, { error: 'instructions is required' });
 
-      const jobDir = currentJob.dir;
+      const jobDir = job.dir;
       const scriptText = fs.readFileSync(path.join(jobDir, 'script.txt'), 'utf8');
       const shots = JSON.parse(fs.readFileSync(path.join(jobDir, 'shots.json'), 'utf8'));
       const prompts = JSON.parse(fs.readFileSync(path.join(jobDir, 'image_prompts.json'), 'utf8'));
@@ -223,27 +317,35 @@ const server = http.createServer(async (req, res) => {
       }
 
       const { voiceId } = applyRevisionPlan(jobDir, planResult.plan);
-      currentJob.status = 'running';
-      currentJob.events = [];
-      currentJob.pendingApproval = null;
-      if (voiceId) currentJob.voiceId = voiceId;
-      runJob();
+      job.status = 'running';
+      job.events = [];
+      job.pendingApproval = null;
+      if (voiceId) job.voiceId = voiceId;
+      runJob(job.id);
       return sendJson(res, 200, { ok: true, notes: planResult.plan.notes, scope: planResult.plan.scope });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/progress') {
+      // Native EventSource can't set an Authorization header, so this one route also
+      // accepts the access token as a query param (the browser side builds the URL that
+      // way specifically for this endpoint — see web/auth-client.js's authedEventSource).
+      const auth = await verifyToken(url.searchParams.get('token')) || await verifyRequestAuth(req);
+      if (!auth) { res.writeHead(401); return res.end('not signed in'); }
+      const jobId = url.searchParams.get('jobId');
+      const job = jobId ? getJob(jobId) : null;
+
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
       });
       res.write('\n');
-      if (currentJob) {
+      if (job && job.userId === auth.userId) {
         // Replay history so a client that (re)connects mid-job still sees full progress.
-        for (const evt of currentJob.events) res.write(`data: ${JSON.stringify(evt)}\n\n`);
-        currentJob.sseClients.push(res);
+        for (const evt of job.events) res.write(`data: ${JSON.stringify(evt)}\n\n`);
+        job.sseClients.push(res);
         req.on('close', () => {
-          if (currentJob) currentJob.sseClients = currentJob.sseClients.filter(r => r !== res);
+          job.sseClients = job.sseClients.filter(r => r !== res);
         });
       } else {
         res.write(`data: ${JSON.stringify({ stage: 'idle', status: 'done' })}\n\n`);
@@ -252,9 +354,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname.startsWith('/api/video/')) {
+      // <video src> / download-link <a href> can't carry an Authorization header either —
+      // same query-param-token accommodation as /api/progress.
+      const auth = await verifyToken(url.searchParams.get('token')) || await verifyRequestAuth(req);
+      if (!auth) return sendJson(res, 401, { error: 'not signed in' });
       const jobId = url.pathname.slice('/api/video/'.length);
       if (!/^[a-z0-9-]+$/i.test(jobId)) return sendJson(res, 400, { error: 'invalid job id' });
-      const videoPath = path.join(ROOT, 'output', jobId, 'final_video.mp4');
+      const job = getJob(jobId);
+      if (!job || job.userId !== auth.userId) return sendJson(res, 404, { error: 'video not found' });
+      const videoPath = path.join(job.dir, 'final_video.mp4');
       if (!fs.existsSync(videoPath)) return sendJson(res, 404, { error: 'video not found' });
       const content = fs.readFileSync(videoPath);
       res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': content.length });
@@ -262,9 +370,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/current-audio') {
-      // Serves the in-progress job's voiceover for the voiceover-approval checkpoint.
-      if (!currentJob) return sendJson(res, 404, { error: 'no active job' });
-      const audioPath = path.join(currentJob.dir, 'voiceover.mp3');
+      // <audio src> can't carry an Authorization header — same query-param-token
+      // accommodation as /api/progress.
+      const auth = await verifyToken(url.searchParams.get('token')) || await verifyRequestAuth(req);
+      if (!auth) return sendJson(res, 401, { error: 'not signed in' });
+      const jobId = url.searchParams.get('jobId');
+      const job = jobId ? getJob(jobId) : null;
+      if (!job || job.userId !== auth.userId) return sendJson(res, 404, { error: 'no active job' });
+      const audioPath = path.join(job.dir, 'voiceover.mp3');
       if (!fs.existsSync(audioPath)) return sendJson(res, 404, { error: 'voiceover not ready yet' });
       const content = fs.readFileSync(audioPath);
       res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Content-Length': content.length });
@@ -281,21 +394,14 @@ const server = http.createServer(async (req, res) => {
 
 // A crashed backend takes down every SSE connection and the whole page with it — bad for
 // a product server. This was hit for real: the process exited with code 4 mid-run.
-// Whatever the root cause, an unexpected error here should never kill the server; it
-// should surface as a broadcast error event for the current job at worst.
+// Whatever the root cause, an unexpected error here should never kill the server.
 process.on('uncaughtException', (err) => {
   console.error('[uncaughtException]', err);
-  if (currentJob && (currentJob.status === 'running' || currentJob.status === 'awaiting-approval')) {
-    currentJob.status = 'error';
-    broadcast({ stage: 'error', status: 'done', error: `Internal error: ${err.message}` });
-  }
+  markAllRunningJobsErrored(`Internal error: ${err.message}`);
 });
 process.on('unhandledRejection', (err) => {
   console.error('[unhandledRejection]', err);
-  if (currentJob && (currentJob.status === 'running' || currentJob.status === 'awaiting-approval')) {
-    currentJob.status = 'error';
-    broadcast({ stage: 'error', status: 'done', error: `Internal error: ${err instanceof Error ? err.message : err}` });
-  }
+  markAllRunningJobsErrored(`Internal error: ${err instanceof Error ? err.message : err}`);
 });
 
 server.listen(PORT, () => {

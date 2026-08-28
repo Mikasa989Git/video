@@ -85,4 +85,14 @@ function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'video';
 }
 
-module.exports = { loadEnv, requireEnv, ffmpegPath, ffprobePath, ffprobeDuration, CostLedger, ensureDir, slugify, ROOT };
+// Like requireEnv, but throws instead of killing the process — requireEnv's
+// exit-the-process behavior is meant for CLI startup checks; inside a long-running
+// multi-user server's per-request code (auth/payments), a missing var must fail just that
+// one request, not take down every other user's in-flight job with it.
+function requireEnvOrThrow(name) {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing required environment variable: ${name}`);
+  return v;
+}
+
+module.exports = { loadEnv, requireEnv, requireEnvOrThrow, ffmpegPath, ffprobePath, ffprobeDuration, CostLedger, ensureDir, slugify, ROOT };

@@ -64,7 +64,11 @@ body {
   padding: 24px 32px;
 }
 
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1.05rem; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1.05rem; text-decoration: none; color: inherit; }
+.topnav { display: flex; align-items: center; gap: 20px; }
+.topnav a { color: var(--text-dim); text-decoration: none; font-size: 0.9rem; }
+.topnav a:hover { color: var(--text); }
+.topnav-cta { width: auto !important; padding: 10px 18px !important; font-size: 0.9rem !important; }
 .brand-mark {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   -webkit-background-clip: text;
@@ -104,7 +108,7 @@ label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px
 .required { color: var(--danger); }
 .optional { color: var(--text-dim); font-weight: 400; }
 
-textarea, input[type="number"], select {
+textarea, input[type="number"], input[type="email"], input[type="password"], input[type="text"], select {
   width: 100%;
   background: var(--field-bg);
   border: 1px solid var(--card-border);
@@ -372,7 +376,58 @@ textarea { resize: vertical; min-height: 64px; }
 .revise-box textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 108, 246, 0.25); }
 .revise-box .primary-btn { width: 100%; }
 
+/* Link-styled button (sign out, toggle sign-in/sign-up, etc.) */
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent-2);
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+.link-btn:hover { color: var(--text); }
+
+/* Wider layout for marketing/pricing pages, vs. the narrow single-panel app views */
+.stage-area.wide { align-items: flex-start; }
+.card.wide { max-width: 880px; margin: 0 auto 24px; }
+
+/* Landing page */
+.landing-hero { text-align: center; padding: 56px 40px; }
+.landing-hero h1 { font-size: 2.1rem; line-height: 1.25; margin: 16px 0 12px; }
+.landing-hero .subtitle { max-width: 560px; margin-left: auto; margin-right: auto; }
+.landing-hero .primary-btn { width: auto; display: inline-flex; padding: 14px 32px; margin-top: 8px; }
+
+.how-it-works { margin: 0; padding-left: 20px; color: var(--text-dim); line-height: 1.7; }
+.how-it-works li { margin-bottom: 10px; }
+.how-it-works strong { color: var(--text); }
+
+/* Pricing tiers */
+.tier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-top: 8px; }
+.tier-card {
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  background: var(--field-bg);
+  display: flex;
+  flex-direction: column;
+}
+.tier-card.current { border-color: var(--accent-2); background: rgba(72, 214, 179, 0.06); }
+.tier-card h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.tier-price { font-size: 1.8rem; font-weight: 700; color: var(--accent-gold); margin: 0 0 16px; }
+.tier-price span { font-size: 0.85rem; font-weight: 400; color: var(--text-dim); }
+.tier-features { list-style: none; margin: 0 0 20px; padding: 0; color: var(--text-dim); font-size: 0.88rem; flex: 1; }
+.tier-features li { padding: 6px 0; border-top: 1px solid var(--card-border); }
+.tier-features li:first-child { border-top: none; }
+.tier-btn { width: 100%; margin-top: auto; }
+
+/* Login/signup */
+.auth-toggle { text-align: center; margin-top: 20px; color: var(--text-dim); font-size: 0.9rem; }
+
 @media (max-width: 480px) {
   .card { padding: 28px 20px; }
   .field-row { grid-template-columns: 1fr; }
+  .landing-hero { padding: 40px 20px; }
+  .landing-hero h1 { font-size: 1.6rem; }
 }

@@ -1,0 +1,29 @@
+{
+  "_readme": "Subscription tiers shown on the pricing page and seeded into Supabase's subscription_tiers table (see supabase/schema.sql's seed section, or re-run the seed manually after editing this file). All numbers below are PLACEHOLDERS — edit price_ils_monthly, included_videos_per_month, max_video_length_minutes, and features before launch. No code changes needed to retune these.",
+  "tiers": [
+    {
+      "id": "starter",
+      "name": "Starter",
+      "price_ils_monthly": 99,
+      "included_videos_per_month": 2,
+      "max_video_length_minutes": 10,
+      "features": ["2 videos per month", "Up to 10 minutes each", "Standard support"]
+    },
+    {
+      "id": "creator",
+      "name": "Creator",
+      "price_ils_monthly": 249,
+      "included_videos_per_month": 6,
+      "max_video_length_minutes": 15,
+      "features": ["6 videos per month", "Up to 15 minutes each", "Priority support"]
+    },
+    {
+      "id": "studio",
+      "name": "Studio",
+      "price_ils_monthly": 599,
+      "included_videos_per_month": 20,
+      "max_video_length_minutes": 15,
+      "features": ["20 videos per month", "Up to 15 minutes each", "Priority support", "Early access to new styles"]
+    }
+  ]
+}
